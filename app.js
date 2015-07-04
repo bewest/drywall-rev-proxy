@@ -167,17 +167,36 @@ function removePrefix (req, res, next) {
   return next( );
 }
 
+// middleware leveraging nginx to re-proxy
+// this function intercepts almost all requests to nginx
 function do_nginx_rewrite (req, res, next) {
   var ORIGIN = process.env['ORIGIN'];
+  var original_host = req.headers['x-forwarded-host'] || req.hostname;
+  var prefix = original_host.split('-login.diabetes.watch').slice(0, -1).join("");
+  var scheme = req.headers['x-forwarded-proto'];
   if (!req.user || !req.isAuthenticated( )) {
     console.log('SKIPPING PROXY sending to next');
+    if (prefix) {
+      console.log('on invalid prefix', prefix);
+      var url = scheme + "://" + req.hostname;
+      console.log('sending', url);
+      res.redirect(url);
+      return res.end( );
+    }
     return next( );
   }
-  var original_host = req.headers['x-forwarded-host'] || req.hostname;
-  var prefix = original_host.split('-login.diabetes.watch').slice(0, 1).join("");
+  // lookup in db, resolve permissions, etc
+  // hardcode for simple POC
+  var allowedFirstUsers = [null, 'bewest', 'first'];
+  if (prefix == 'first' && allowedFirstUsers.indexOf(req.user.username)) {
+    ORIGIN = '/x-accel-redirect/' + 'ns-dev2.cbrese.com';
+  }
+  if (req.user.username == 'bewest' && prefix == 'demo') {
+    ORIGIN = '/x-accel-redirectssl/' + 'p5001-backends.diabetes.watch';
+  }
   var uri = ORIGIN + '/' + encodeURIComponent(req.url.slice(1));
-  var scheme = req.headers['x-forwarded-proto'];
-  if (req.session.do_proxy) {
+  // if (req.session.do_proxy) {
+  if (prefix) {
     console.log("PROXY FOR HOST", original_host, prefix);
     console.log('redirecting internally', req.user);
     if (req.url.indexOf('/logout') === 0) {
@@ -192,7 +211,8 @@ function do_nginx_rewrite (req, res, next) {
       return res.redirect('/');
     }
     console.log('redirecting', 'to', uri);
-    res.header('X-Accel-Redirect', uri);
+    res.header('X-Accel-Redirect', uri)
+    res.end( );
     // res.send("")
   } else {
     if (req.url.indexOf('/nightscout') === 0) {
@@ -200,7 +220,8 @@ function do_nginx_rewrite (req, res, next) {
       req.session.do_proxy = true;
       req.session.save( );
       var url = scheme + "://" + req.user.username + '-' + req.hostname + '/';
-      return res.redirect(url);
+      res.redirect(url);
+      return res.end( );
       // return next( );
     }
     return next( );

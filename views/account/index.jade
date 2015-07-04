@@ -42,9 +42,14 @@ block body
             div.stat-label Hour of Day
     div.col-sm-6.special
       div.page-header
-        h1 Go Faster Everyday
+        h1 Login with Nightscout
+      div.row
+        h2 Manage Nightscout
+        h3 Users
+        h3 Groups
+        h3 Schedules
       i.fa.fa-dashboard.super-awesome
+      img(src="//#{ username }-login.diabetes.watch/api/v1/status.svg")
 
-  div.row
-    h2
-      a(href="/nightscout")
+      h2
+        a(href="//#{ username }-login.diabetes.watch/") #{ username } with Nightscout
