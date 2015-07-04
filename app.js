@@ -52,7 +52,7 @@ app.use(session({
   saveUninitialized: true,
   secret: config.cryptoKey,
   // cookie: { path: '/', domain: '.diabetes.watch', maxAge: 1000 * 60 * 60 * 24 * 30 },
-  cookie: { domain: '.diabetes.watch' },
+  cookie: { domain: config.cookie.domain },
   name: 'drywall.connect.sid',
   store: new mongoStore({ url: config.mongodb.uri })
 }));
@@ -63,11 +63,11 @@ app.use(passport.session());
 app.use(function (req, res, next) {
     console.log('URL', req.url);
   if (req.body)
-    console.log('body', req.body._csrf);
+    // console.log('body', req.body._csrf);
   if (req.query)
     console.log('query', req.query._csrf);
-  console.log('COOKIE', req.session.cookie);
-  console.log('COOKIE', req.cookies);
+  // console.log('COOKIE', req.session.cookie);
+  // console.log('COOKIE', req.cookies);
   console.log('headers', JSON.stringify(req.headers, 0, 2));
   next( );
 });
@@ -92,8 +92,8 @@ function defaultValue(req) {
 
 //response locals
 app.use(function(req, res, next) {
-  console.log('req COOKIE', req.cookies);
-  console.log('req SESSION', req.session);
+  // console.log('req COOKIE', req.cookies);
+  // console.log('req SESSION', req.session);
   res.locals.user = {};
   res.locals.user.defaultReturnUrl = req.user && req.user.defaultReturnUrl();
   res.locals.user.username = req.user && req.user.username;
@@ -197,6 +197,15 @@ function do_nginx_rewrite (req, res, next) {
   var uri = ORIGIN + '/' + encodeURIComponent(req.url.slice(1));
   // if (req.session.do_proxy) {
   if (prefix) {
+    console.log("SITES FOR prefix", prefix, req.user.username, req.user.roles.account.sites);
+    for (var x in req.user.roles.account.sites) {
+      var site = req.user.roles.account.sites[x];
+      if (site.name == prefix) {
+        uri = '/x-accel-redirectssl/u-' + prefix + '-backends.diabetes.watch/' + encodeURIComponent(req.url.slice(1));
+        console.log('MATCHING SITE', prefix, uri, site);
+        break;
+      }
+    }
     console.log("PROXY FOR HOST", original_host, prefix);
     console.log('redirecting internally', req.user);
     if (req.url.indexOf('/logout') === 0) {
@@ -235,7 +244,20 @@ function do_nginx_rewrite (req, res, next) {
 // app.all('*', maybeProxy);
 // app.all('/', removePrefix, noForgeries, setCSRFToken, unprotected);
 // app.all('/*', noForgeries, setCSRFToken, unprotected);
-app.all('/*', do_nginx_rewrite, unprotected);
+function fetches_sites (req, res, next) {
+  req.sites = [ ];
+  if (req.user &&  req.isAuthenticated( )) {
+    req.user.roles.account.populate('sites', function (err, account) {
+      console.log('account', account, account.sites);
+      req.sites = account.sites;
+      next( );
+    });
+    return;
+  } else {
+    next( );
+  }
+}
+app.all('/*', fetches_sites, do_nginx_rewrite, unprotected);
 // app.use(maybeProxy);
 
 //custom (friendly) error handler
